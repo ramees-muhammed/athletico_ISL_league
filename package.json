@@ -12,6 +12,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
     "axios": "^1.13.6",
+    "browser-image-compression": "^2.0.2",
     "firebase": "^12.9.0",
     "formik": "^2.4.9",
     "framer-motion": "^12.34.3",
@@ -20,6 +21,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1",
+    "react-select": "^5.10.2",
     "sass": "^1.97.3",
     "yup": "^1.7.1"
   },

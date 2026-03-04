@@ -10,30 +10,33 @@
   .login-card {
     width: 100%;
     max-width: 420px;
-    background: var(--color-white);
+    background: var(--color-white, #ffffff);
     padding: 3.5rem 2.5rem;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-md, 16px);
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-    border-top: 8px solid var(--color-red);
+    border-top: 8px solid var(--color-red, #e74c3c);
     position: relative;
 
     header {
       text-align: center;
       margin-bottom: 2.5rem;
 
-      .logo-shield {
+    .logo-shield {
         width: 90px;
         height: 90px;
         margin: 0 auto 1.5rem;
-        padding: 10px;
-        background: var(--color-white);
+        background: var(--color-white, #ffffff);
         border-radius: 50%;
         box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         
-        img {
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
+        /* Add Flexbox to perfectly center the icon */
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        
+        /* Remove the old img styles and style the new SVG icon */
+        .admin-icon {
+          color: var(--color-red, #e74c3c);
         }
       }
 
@@ -41,14 +44,56 @@
         font-size: 2.4rem;
         letter-spacing: -1px;
         margin-bottom: 0.5rem;
-        span { color: var(--color-red); }
+        color: #333;
+        span { color: var(--color-red, #e74c3c); }
       }
 
       p {
-        font-family: var(--font-content);
+        font-family: var(--font-content, sans-serif);
         font-size: 0.85rem;
         color: #666;
         line-height: 1.4;
+      }
+    }
+
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem; /* Consistent spacing between inputs */
+    }
+
+    /* --- PASSWORD TOGGLE SETUP --- */
+    .password-input-wrapper {
+      position: relative;
+      width: 100%;
+
+      /* Ensure the Input component inside leaves room for the icon */
+      input {
+        padding-right: 3rem; /* Push text so it doesn't hide behind the icon */
+      }
+
+      .password-toggle-btn {
+        position: absolute;
+        right: 12px;
+        top: 38px; /* Adjust this value based on your Input label height */
+        background: transparent;
+        border: none;
+        color: #888;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px;
+        transition: color 0.2s ease;
+
+        &:hover {
+          color: var(--color-red, #e74c3c); /* Premium hover state */
+        }
+
+        &:focus {
+          outline: none;
+          color: #333;
+        }
       }
     }
 
@@ -59,10 +104,10 @@
     .login-footer {
       margin-top: 2.5rem;
       padding-top: 1.5rem;
-      border-top: 1px solid var(--color-gray-medium);
+      border-top: 1px solid var(--color-gray-medium, #eee);
       
       p {
-        font-family: var(--font-content);
+        font-family: var(--font-content, sans-serif);
         font-size: 0.7rem;
         text-transform: uppercase;
         letter-spacing: 1.5px;

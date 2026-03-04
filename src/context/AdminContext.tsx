@@ -1,8 +1,11 @@
+// src/context/AdminContext.tsx
 import React, { createContext, useContext, useState } from 'react';
+import { verifyAdminLogin } from '../api/adminApi';
+
 
 interface AdminContextType {
   isAdmin: boolean;
-  login: (id: string, pass: string) => boolean;
+  login: (id: string, pass: string) => Promise<boolean>; // Changed to Promise
   logout: () => void;
 }
 
@@ -13,9 +16,11 @@ export const AdminProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return sessionStorage.getItem('admin_session') === 'active';
   });
 
-  const login = (id: string, pass: string) => {
-    // Basic table-style check as requested
-    if (id === 'admin123' && pass === 'athletico2026') {
+  // Now an async function calling Firebase
+  const login = async (id: string, pass: string) => {
+    const isValid = await verifyAdminLogin(id, pass);
+    
+    if (isValid) {
       setIsAdmin(true);
       sessionStorage.setItem('admin_session', 'active');
       return true;

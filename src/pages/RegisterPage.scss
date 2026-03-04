@@ -44,6 +44,9 @@ margin: 50px 0px;
       grid-template-columns: 1fr;
       gap: 0;
     }
+
+
+    
   }
 
 .photo-section {
@@ -89,24 +92,52 @@ margin: 50px 0px;
         height: 100%;
         object-fit: cover;
       }
-
-      .remove-btn {
+.remove-btn {
         position: absolute;
-        top: 8px;
-        right: 8px;
-        background: var(--color-red);
-        color: white;
+        top: 10px;
+        right: 10px;
+        
+        /* --- THE FIX: Force Exact Dimensions --- */
+        width: 32px;
+        height: 32px;
+        min-width: 32px; /* Prevents flexbox or global styles from overriding */
+        min-height: 32px;
+        padding: 0; /* Strips away any global button padding */
+        margin: 0;
+        box-sizing: border-box; /* Ensures border/padding don't add to the width */
+        aspect-ratio: 1 / 1; /* Modern safety net for perfect squares */
+        border-radius: 50%; /* Turns the perfect square into a perfect circle */
+        
+        /* --- Premium Visuals --- */
+        background: rgba(255, 255, 255, 0.9); 
+        backdrop-filter: blur(4px); 
+        color: var(--color-dark, #333);
         border: none;
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
         cursor: pointer;
-        font-size: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); 
         z-index: 2;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+        /* Ensure the SVG icon itself doesn't cause stretching */
+        svg {
+          width: 16px;
+          height: 16px;
+          display: block;
+        }
+
+        &:hover {
+          background: var(--color-red, #e74c3c); 
+          color: white; 
+          transform: scale(1.1); 
+          box-shadow: 0 6px 16px rgba(231, 76, 60, 0.3); 
+        }
+
+        &:active {
+          transform: scale(0.95);
+        }
       }
 
       .upload-placeholder {

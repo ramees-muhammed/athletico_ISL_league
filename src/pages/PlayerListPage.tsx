@@ -1,37 +1,62 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, RotateCcw, Trash2 } from 'lucide-react'; 
+import { CheckCircle, Loader2, Trash2, Undo2, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'; 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAdmin } from '../context/AdminContext';
 import { pageTransition } from '../utils/motion';
 import Modal from '../components/ui/Modal/Modal';
 
-
 import './PlayerListPage.scss';
 import { fetchPlayersAxios } from '../hooks/usePlayers';
 import { deletePlayerAxios, updatePlayerStatusAxios } from '../api/playerApi';
+
+const ITEMS_PER_PAGE = 10;
 
 const PlayerListPage = () => {
   const { isAdmin } = useAdmin();
   const queryClient = useQueryClient();
   const [activeCard, setActiveCard] = useState<string | null>(null);
+  
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; id: string | null }>({
+    open: false,
+    id: null,
+  });
 
-  // 1. Fetch Players with TanStack Query
-  const { data: players = [], isLoading, isError, error } = useQuery({
+  // --- PAGINATION STATES ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const [mobileVisibleCount, setMobileVisibleCount] = useState(10);
+
+const { data: players = [], isLoading, isError, error } = useQuery({
     queryKey: ['players'],
     queryFn: fetchPlayersAxios,
     staleTime: 1000 * 60 * 5, 
+    // --- ADD THIS SELECT FUNCTION ---
+    select: (data) => {
+      // Create a copy of the array and sort it by createdAt (Oldest to Newest)
+      return [...data].sort((a, b) => a.createdAt - b.createdAt);
+    }
   });
 
-  // 2. Mutation for Status Toggle
+  // --- DATA SLICING ---
+  const totalPages = Math.ceil(players.length / ITEMS_PER_PAGE);
+  
+  const desktopPlayers = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return players.slice(start, start + ITEMS_PER_PAGE);
+  }, [players, currentPage]);
+
+  const mobilePlayers = useMemo(() => {
+    return players.slice(0, mobileVisibleCount);
+  }, [players, mobileVisibleCount]);
+
+
   const statusMutation = useMutation({
     mutationFn: updatePlayerStatusAxios,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['players'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['players'] }),
+    onSettled: () => setUpdatingId(null)
   });
 
-  // 3. Mutation for Deletion
   const deleteMutation = useMutation({
     mutationFn: deletePlayerAxios,
     onSuccess: () => {
@@ -40,29 +65,90 @@ const PlayerListPage = () => {
     },
   });
 
-  const [deleteModal, setDeleteModal] = useState<{ open: boolean; id: string | null }>({
-    open: false,
-    id: null,
-  });
-
   const handleToggleStatus = (id: string, currentStatus: string) => {
     const newStatus = currentStatus === 'Pending' ? 'Success' : 'Pending';
+    setUpdatingId(id);
     statusMutation.mutate({ id, newStatus });
   };
 
   const handleDeleteConfirm = () => {
-    if (deleteModal.id) {
-      deleteMutation.mutate(deleteModal.id);
-    }
+    if (deleteModal.id) deleteMutation.mutate(deleteModal.id);
   };
 
-  if (isLoading) return <div className="loader">Loading Athletico Squad...</div>;
+ if (isLoading) {
+    return (
+      <div className="player-list-wrapper">
+        <header className="page-header">
+          <h2>Loading <span>Players</span></h2>
+        </header>
+
+        {/* Desktop Skeleton Table */}
+        <div className="desktop-container">
+          <table className="premium-table skeleton-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Player</th>
+                <th>Club</th>
+                <th>Position</th>
+                <th>Status</th>
+                {isAdmin && <th>Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {/* Generate 5 fake rows for the skeleton */}
+              {Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i}>
+                  <td><div className="skeleton skeleton-text short"></div></td>
+                  <td className="player-cell">
+                    <div className="skeleton skeleton-avatar"></div>
+                    <div className="skeleton skeleton-text medium"></div>
+                  </td>
+                  <td><div className="skeleton skeleton-text medium"></div></td>
+                  <td><div className="skeleton skeleton-tag"></div></td>
+                  <td><div className="skeleton skeleton-badge"></div></td>
+                  {isAdmin && (
+                    <td className="action-cells">
+                      <div className="skeleton skeleton-btn"></div>
+                      <div className="skeleton skeleton-btn"></div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile Skeleton Cards */}
+        <div className="mobile-container">
+          <div className="card-stack">
+            {/* Generate 4 fake cards for mobile */}
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="expandable-card skeleton-card">
+                <div className="card-header-small">
+                  <div className="skeleton skeleton-avatar"></div>
+                  <div className="header-info">
+                    <div className="skeleton skeleton-text long"></div>
+                    <div className="header-tags">
+                      <div className="skeleton skeleton-badge mini"></div>
+                      <div className="skeleton skeleton-text medium"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (isError) return <div className="error">Error: {(error as any).message}</div>;
 
   return (
     <motion.div {...pageTransition} className="player-list-wrapper">
       <header className="page-header">
-        <h2>ATHLETICO <span>SQUAD</span></h2>
+        <h2>Players <span>List</span></h2>
       </header>
 
       {/* --- DESKTOP VIEW --- */}
@@ -79,9 +165,14 @@ const PlayerListPage = () => {
             </tr>
           </thead>
           <tbody>
-            {players.map((p, i) => (
+            {desktopPlayers.map((p, i) => {
+              const isUpdating = updatingId === p.id;
+              // Calculate actual index based on page
+              const actualIndex = (currentPage - 1) * ITEMS_PER_PAGE + i + 1;
+              
+              return (
               <tr key={p.id}>
-                <td>{i + 1}</td>
+                <td>{actualIndex}</td>
                 <td className="player-cell">
                   <img src={p.facePhotoUrl} alt={p.fullname} />
                   <span>{p.fullname}</span>
@@ -97,92 +188,158 @@ const PlayerListPage = () => {
                   <td className="action-cells">
                     <button 
                       className={`action-btn ${p.status === 'Pending' ? 'accept' : 'revert'}`}
-                      disabled={statusMutation.isPending}
+                      disabled={isUpdating || statusMutation.isPending}
                       onClick={() => handleToggleStatus(p.id!, p.status)}
+                      title={p.status === 'Pending' ? "Approve Player" : "Revert to Pending"}
                     >
-                      {p.status === 'Pending' ? <Check size={18} /> : <RotateCcw size={18} />}
+                      {isUpdating ? <Loader2 size={18} className="spin" /> : 
+                       p.status === 'Pending' ? <CheckCircle size={18} /> : <Undo2 size={18} />}
                     </button>
                     <button 
                       className="action-btn delete"
                       onClick={() => setDeleteModal({ open: true, id: p.id || null })}
+                      disabled={isUpdating}
+                      title="Delete Player"
                     >
                       <Trash2 size={18} />
                     </button>
                   </td>
                 )}
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
+
+        {/* Desktop Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="pagination-container">
+            <button 
+              className="page-nav-btn" 
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            >
+              <ChevronLeft size={20} />
+            </button>
+            
+            <div className="page-numbers">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(num => (
+                <button
+                  key={num}
+                  className={`page-num-btn ${currentPage === num ? 'active' : ''}`}
+                  onClick={() => setCurrentPage(num)}
+                >
+                  {num}
+                </button>
+              ))}
+            </div>
+
+            <button 
+              className="page-nav-btn" 
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* --- MOBILE VIEW (Exact Layout Logic) --- */}
+      {/* --- MOBILE VIEW --- */}
       <div className="mobile-container">
         <div className="card-stack">
-          {players.map((p) => (
-            <motion.div
-              layoutId={`card-${p.id}`}
-              key={p.id}
-              onClick={() => p.id && setActiveCard(activeCard === p.id ? null : p.id)}
-              className={`expandable-card ${activeCard === p.id ? 'expanded' : ''}`}
-            >
-              <div className="card-header-small">
-                <motion.img layoutId={`img-${p.id}`} src={p.facePhotoUrl} />
-                <div className="header-info">
-                  <motion.h3 layoutId={`name-${p.id}`}>{p.fullname}</motion.h3>
-                  <div className="header-tags">
-                    <span className={`status-badge mini ${p.status?.toLowerCase()}`}>{p.status}</span>
-                    <p>{p.club}</p>
+          {mobilePlayers.map((p, i) => {
+            const isUpdating = updatingId === p.id;
+            const isActive = activeCard === p.id;
+
+            return (
+              <motion.div
+                layout 
+                key={p.id}
+                onClick={() => p.id && setActiveCard(isActive ? null : p.id)}
+                className={`expandable-card ${isActive ? 'expanded' : ''}`}
+                transition={{ layout: { duration: 0.4, type: "spring", bounce: 0.2 } }}
+              >
+                <motion.div layout className="player-index">#{i + 1}</motion.div>
+                <div className="card-header-small">
+                  <motion.img layout src={p.facePhotoUrl} alt="player face" />
+                  <div className="header-info">
+                    <motion.h3 layout>{p.fullname}</motion.h3>
+                    <div className="header-tags">
+                      <span className={`status-badge mini ${p.status?.toLowerCase()}`}>{p.status}</span>
+                      <p>{p.club}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <AnimatePresence>
-                {activeCard === p.id && (
-                  <motion.div 
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }} 
-                    exit={{ opacity: 0 }} 
-                    className="expanded-content"
-                  >
-                    <img src={p.fullPhotoUrl} className="full-view-img" alt="Full View" />
-                    <div className="stats-row">
-                      <p><span>Position:</span> {p.position}</p>
-                      {/* <p><span>Age:</span> {p.age}</p> */}
-                      <p><span>Place:</span> {p.place}</p>
-                    </div>
-
-                    {isAdmin && (
-                      <div className="mobile-admin-actions">
-                        <button 
-                          className={`mobile-btn ${p.status === 'Pending' ? 'accept' : 'revert'}`}
-                          disabled={statusMutation.isPending}
-                          onClick={(e) => { 
-                            e.stopPropagation(); 
-                            handleToggleStatus(p.id!, p.status); 
-                          }}
-                        >
-                           {p.status === 'Pending' ? <Check size={20} /> : <RotateCcw size={20} />}
-                           {p.status === 'Pending' ? 'Approve Player' : 'Set to Pending'}
-                        </button>
-                        <button 
-                          className="mobile-btn delete"
-                          onClick={(e) => { 
-                            e.stopPropagation(); 
-                            setDeleteModal({ open: true, id: p.id || null }); 
-                          }}
-                        >
-                          <Trash2 size={20} />
-                          Remove Player
-                        </button>
+                <AnimatePresence initial={false}>
+                  {isActive && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.4, ease: [0.04, 0.62, 0.23, 0.98] }}
+                      style={{ overflow: "hidden" }} 
+                    >
+                      <div className="expanded-content">
+                        <img src={p.fullPhotoUrl} className="full-view-img" alt="Full View" />
+                        <div className="stats-row">
+                          <p><span>Position:</span> {p.position}</p>
+                          <p><span>Place:</span> {p.place}</p>
+                        </div>
+                        
+                        {isAdmin && (
+                          <div className="mobile-admin-actions">
+                            <button 
+                              className={`mobile-btn ${p.status === 'Pending' ? 'accept' : 'revert'}`}
+                              disabled={isUpdating || statusMutation.isPending}
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                handleToggleStatus(p.id!, p.status); 
+                              }}
+                            >
+                              {isUpdating ? <Loader2 size={20} className="spin" /> : 
+                               p.status === 'Pending' ? <CheckCircle size={20} /> : <Undo2 size={20} />}
+                              {isUpdating ? 'Updating...' : p.status === 'Pending' ? 'Approve Player' : 'Set to Pending'}
+                            </button>
+                            
+                            <button 
+                              className="mobile-btn delete"
+                              disabled={isUpdating}
+                              onClick={(e) => { 
+                                e.stopPropagation(); 
+                                setDeleteModal({ open: true, id: p.id || null }); 
+                              }}
+                            >
+                              <Trash2 size={20} /> Remove Player
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
-          ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            );
+          })}
         </div>
+
+        {/* Mobile Premium Infinite Scroll / Load More */}
+        {mobileVisibleCount < players.length && (
+          <motion.div 
+            className="load-more-container"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <button 
+              className="load-more-btn"
+              onClick={() => setMobileVisibleCount(prev => prev + 10)}
+            >
+              Load More Players
+              <ChevronDown size={18} className="bounce-arrow" />
+            </button>
+          </motion.div>
+        )}
       </div>
 
       <Modal 

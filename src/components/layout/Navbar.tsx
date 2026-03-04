@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAdmin } from '../../context/AdminContext';
 import './Navbar.scss';
 import Modal from '../ui/Modal/Modal';
-import { LayoutDashboard, Users } from 'lucide-react';
+import { LayoutDashboard, LogOut, Users } from 'lucide-react';
 
 const Navbar = () => {
   const navigate = useNavigate();
@@ -22,7 +22,7 @@ const Navbar = () => {
     <nav className="navbar">
       <div className="nav-container">
         <div className="nav-logo" onClick={() => navigate('/')}>
-          <img src="/athletico_logo.jpeg" alt="Athletico" />
+          <img src="/isl_official_logo.jpeg" alt="Athletico" />
           {/* <span className="logo-text">ATHLETICO <span>VPM</span></span> */}
         </div>
         
@@ -43,12 +43,13 @@ const Navbar = () => {
         <LayoutDashboard size={14} />
         <span>ADMIN</span>
       </div>
-      <button 
-        onClick={() => setIsLogoutModalOpen(true)} 
-        className="btn-auth logout"
-      >
-        LOGOUT
-      </button>
+<button
+          onClick={() => setIsLogoutModalOpen(true)}
+          className="logout-btn"
+          title="End Session"
+        >
+          <LogOut size={16} strokeWidth={2.5} />
+        </button>
     </div>
   ) : (
     <button onClick={() => navigate('/admin-login')} className="btn-auth login">

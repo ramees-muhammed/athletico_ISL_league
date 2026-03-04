@@ -22,16 +22,41 @@ export const fetchPlayers = async (isAdmin: boolean) => {
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
 };
 
+
+// Helper function to get current counts
+export const getLeagueStatus = async () => {
+  const allPlayersSnapshot = await getDocs(playerCol);
+  const players = allPlayersSnapshot.docs.map(doc => doc.data() as Player);
+
+  const gkCount = players.filter(p => p.position === 'GK').length;
+  const outfieldCount = players.length - gkCount;
+
+  return {
+    total: players.length,
+    gkCount,
+    outfieldCount
+  };
+};
+
 export const registerPlayer = async (playerData: Omit<Player, 'id' | 'status' | 'createdAt'>) => {
-console.log("playerDataaaa", playerData);
 
 
-  const allPlayers = await getDocs(playerCol);
-  if (allPlayers.size >= 50) throw new Error('Registration Limit Reached');
+  // throw new Error('League is full! (Max 48 players reached)');
+  
+  // We keep the safety check here too, just in case
+  const status = await getLeagueStatus();
+
+  if (status.total >= 48) throw new Error('League is full! (Max 48)');
+  
+  if (playerData.position === 'GK') {
+    if (status.gkCount >= 7) throw new Error('Goalkeeper slots are full! (Max 7)');
+  } else {
+    if (status.outfieldCount >= 41) throw new Error('Outfield slots are full! (Max 41)');
+  }
 
   return await addDoc(playerCol, {
     ...playerData,
-    status: 'pending', // Centralized status management
+    status: 'Pending', 
     createdAt: Date.now()
   });
 };

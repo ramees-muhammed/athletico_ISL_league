@@ -1,21 +1,27 @@
+// src/pages/AdminLoginPage.tsx
+// src/pages/AdminLoginPage.tsx
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
+import { Eye, EyeOff, ShieldCheck } from 'lucide-react'; // <-- Import icons
 
-import { useAdmin } from '../context/AdminContext';
 import { pageTransition } from '../utils/motion';
 import Input from '../components/ui/Input/Input';
 import Button from '../components/ui/Button/Button';
 import './AdminLoginPage.scss';
 import Toast from '../components/ui/Toaster/Toast';
+import { useAdmin } from '../context/AdminContext';
 
 const AdminLoginPage = () => {
   const navigate = useNavigate();
   const { login } = useAdmin();
   
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  // Add state for password visibility
+  const [showPassword, setShowPassword] = useState(false); 
+  
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; isVisible: boolean }>({
     message: '',
     type: 'success',
@@ -37,13 +43,11 @@ const AdminLoginPage = () => {
     onSubmit: async (values) => {
       setIsLoggingIn(true);
       
-      // Simulate premium delay
-      setTimeout(() => {
-        const success = login(values.idNumber, values.password);
+      try {
+        const success = await login(values.idNumber, values.password);
         
         if (success) {
           showToast("Login Successful! Welcome, Admin.", "success");
-          // Small delay so they see the success toast before the page slides away
           setTimeout(() => {
             navigate('/players');
           }, 1500);
@@ -51,7 +55,10 @@ const AdminLoginPage = () => {
           showToast("Access Denied: Invalid Credentials", "error");
           setIsLoggingIn(false);
         }
-      }, 1000);
+      } catch (error) {
+        showToast("Server Error: Please try again later.", "error");
+        setIsLoggingIn(false);
+      }
     },
   });
 
@@ -65,31 +72,58 @@ const AdminLoginPage = () => {
       />
 
       <div className="login-card">
-        <header>
+       <header>
           <div className="logo-shield">
-             <img src="/images/home_page_img.jpeg" alt="Athletico Logo" />
+             {/* 2. Replace the image with the Lucide Icon */}
+             <ShieldCheck size={44} strokeWidth={1.5} className="admin-icon" />
           </div>
           <h2>ADMIN <span>PORTAL</span></h2>
-          <p>Enter <strong>admin123</strong> / <strong>athletico2026</strong> to test</p>
+          <p>Please enter your authorized credentials</p>
         </header>
 
         <form onSubmit={formik.handleSubmit} noValidate>
           <Input 
             label="Admin ID Number" 
-            placeholder="admin123"
+            placeholder="Enter ID number"
             {...formik.getFieldProps('idNumber')}
             error={formik.errors.idNumber}
             touched={formik.touched.idNumber}
           />
 
-          <Input 
-            label="Password" 
-            type="password"
-            placeholder="athletico2026"
-            {...formik.getFieldProps('password')}
-            error={formik.errors.password}
-            touched={formik.touched.password}
-          />
+          {/* Password Input Wrapper */}
+          <div className="password-input-wrapper">
+            <Input 
+              label="Password" 
+              type={showPassword ? "text" : "password"} // <-- Toggle Type
+              placeholder="Enter password"
+              {...formik.getFieldProps('password')}
+              error={formik.errors.password}
+              touched={formik.touched.password}
+            />
+            {/* Toggle Button */}
+            <button
+              type="button"
+              className="password-toggle-btn"
+              onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={showPassword ? 'eye-off' : 'eye'}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  {showPassword ? (
+                    <EyeOff size={20} strokeWidth={1.5} />
+                  ) : (
+                    <Eye size={20} strokeWidth={1.5} />
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </button>
+          </div>
 
           <Button 
             type="submit" 
