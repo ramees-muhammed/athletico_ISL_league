@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, Loader2, Trash2, Undo2, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'; 
+import { CheckCircle, Loader2, Trash2, Undo2, ChevronLeft, ChevronRight, Filter } from 'lucide-react'; 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAdmin } from '../context/AdminContext';
 import { pageTransition } from '../utils/motion';
@@ -11,6 +11,7 @@ import { fetchPlayersAxios } from '../hooks/usePlayers';
 import { deletePlayerAxios, updatePlayerStatusAxios } from '../api/playerApi';
 
 const ITEMS_PER_PAGE = 10;
+type FilterStatus = 'All' | 'Pending' | 'Success';
 
 const PlayerListPage = () => {
   const { isAdmin } = useAdmin();
@@ -27,6 +28,11 @@ const PlayerListPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [mobileVisibleCount, setMobileVisibleCount] = useState(10);
 
+  const [currentFilter, setCurrentFilter] = useState<FilterStatus>('All');
+
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
 const { data: players = [], isLoading, isError, error } = useQuery({
     queryKey: ['players'],
     queryFn: fetchPlayersAxios,
@@ -38,18 +44,31 @@ const { data: players = [], isLoading, isError, error } = useQuery({
     }
   });
 
-  // --- DATA SLICING ---
-  const totalPages = Math.ceil(players.length / ITEMS_PER_PAGE);
+
+// --- FILTERING LOGIC ---
+  const filteredPlayers = useMemo(() => {
+    if (currentFilter === 'All') return players;
+    return players.filter(player => player.status === currentFilter);
+  }, [players, currentFilter]);
+
+  // --- DATA SLICING (Now uses filteredPlayers instead of players) ---
+  const totalPages = Math.ceil(filteredPlayers.length / ITEMS_PER_PAGE);
   
   const desktopPlayers = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return players.slice(start, start + ITEMS_PER_PAGE);
-  }, [players, currentPage]);
+    return filteredPlayers.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredPlayers, currentPage]);
 
   const mobilePlayers = useMemo(() => {
-    return players.slice(0, mobileVisibleCount);
-  }, [players, mobileVisibleCount]);
+    return filteredPlayers.slice(0, mobileVisibleCount);
+  }, [filteredPlayers, mobileVisibleCount]);
 
+
+  const handleFilterChange = (filter: FilterStatus) => {
+setCurrentFilter(filter);
+setCurrentPage(1);
+setMobileVisibleCount(10);
+  };
 
   const statusMutation = useMutation({
     mutationFn: updatePlayerStatusAxios,
@@ -75,12 +94,47 @@ const { data: players = [], isLoading, isError, error } = useQuery({
     if (deleteModal.id) deleteMutation.mutate(deleteModal.id);
   };
 
+
+
+ useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const target = entries[0];
+        // If the bottom div comes into view, and we aren't already loading, and there are more players to show
+        if (target.isIntersecting && !isLoadingMore && mobileVisibleCount < filteredPlayers.length) {
+          setIsLoadingMore(true);
+          
+          // Add a tiny artificial delay so the user sees the spinner (better UX)
+          setTimeout(() => {
+            setMobileVisibleCount((prev) => prev + 10);
+            setIsLoadingMore(false);
+          }, 600); 
+        }
+      },
+      { threshold: 0.1 } // Triggers when 10% of the target is visible
+    );
+
+    const currentTarget = loadMoreRef.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [mobileVisibleCount, filteredPlayers.length, isLoadingMore]);
+
+
  if (isLoading) {
     return (
       <div className="player-list-wrapper">
         <header className="page-header">
           <h2>Loading <span>Players</span></h2>
         </header>
+
+
 
         {/* Desktop Skeleton Table */}
         <div className="desktop-container">
@@ -147,13 +201,42 @@ const { data: players = [], isLoading, isError, error } = useQuery({
 
   return (
     <motion.div {...pageTransition} className="player-list-wrapper">
-      <header className="page-header">
+      <div className="mobile-sticky-header">
+     <header className="page-header">
         <h2>Players <span>List</span></h2>
       </header>
 
+                    {/* --- ADMIN FILTER CONTROLS --- */}
+      {isAdmin && (
+        <div className="admin-controls-wrapper">
+          <div className="status-filter-tabs">
+            <div className="filter-icon"><Filter size={18} /></div>
+            {(['All', 'Pending', 'Success'] as FilterStatus[]).map(status => (
+              <button
+                key={status}
+                className={`filter-tab ${currentFilter === status ? 'active' : ''}`}
+                onClick={() => handleFilterChange(status)}
+              >
+                {status}
+                <span className="count-badge">
+                  {status === 'All' 
+                    ? players.length 
+                    : players.filter(p => p.status === status).length}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      </div>
+ 
+
+
       {/* --- DESKTOP VIEW --- */}
       <div className="desktop-container">
-        <table className="premium-table">
+        <div className="table-scroll-wrapper">
+     <table className="premium-table">
           <thead>
             <tr>
               <th>#</th>
@@ -210,6 +293,8 @@ const { data: players = [], isLoading, isError, error } = useQuery({
             })}
           </tbody>
         </table>
+        </div>
+   
 
         {/* Desktop Pagination Controls */}
         {totalPages > 1 && (
@@ -325,20 +410,22 @@ const { data: players = [], isLoading, isError, error } = useQuery({
         </div>
 
         {/* Mobile Premium Infinite Scroll / Load More */}
-        {mobileVisibleCount < players.length && (
-          <motion.div 
-            className="load-more-container"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <button 
-              className="load-more-btn"
-              onClick={() => setMobileVisibleCount(prev => prev + 10)}
-            >
-              Load More Players
-              <ChevronDown size={18} className="bounce-arrow" />
-            </button>
-          </motion.div>
+{mobileVisibleCount < filteredPlayers.length && (
+          <div ref={loadMoreRef} className="infinite-scroll-trigger">
+            <AnimatePresence>
+              {isLoadingMore && (
+                <motion.div 
+                  className="loading-spinner-wrapper"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                >
+                  <Loader2 size={24} className="spin" color="var(--color-red)" />
+                  <span>Loading players...</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         )}
       </div>
 
