@@ -48,13 +48,13 @@ export const generatePlayerPdf = async (players: PlayerData[]): Promise<void> =>
   //  Fetch the official logo from the public folder
   const logoBase64 = await getBase64Image('/isl_official_logo.jpeg', true);
 
-  // 2. Setup Header Coordinates
-  let textStartX = 14; // Default starting X position
+ // 2. Setup Header Coordinates (Pushed to the left edge)
+  let textStartX = 8; // Changed from 14 to 8 to match new margins
   
   if (logoBase64) {
-    // Draw Logo (X: 14, Y: 12, Width: 20, Height: 20)
-    doc.addImage(logoBase64, 'JPEG', 14, 12, 20, 20);
-    textStartX = 38; // Shift text to the right to make room for the logo
+    // Draw Logo (X: 8, Y: 12, Width: 20, Height: 20)
+    doc.addImage(logoBase64, 'JPEG', 8, 12, 20, 20);
+    textStartX = 32; // Shift text to right of logo
   }
 
   // 3. Premium Document Header
@@ -93,51 +93,76 @@ export const generatePlayerPdf = async (players: PlayerData[]): Promise<void> =>
     }
   }
 
-  // 4. Generate the Aligned, Premium Table
+// 4. Generate the Aligned, Premium Table
   autoTable(doc, {
-    startY: 42, // Start below the header
+    startY: 42,
+    // explicitly set tight margins to make the table as wide as possible
+    margin: { left: 8, right: 8 }, 
     head: [['#', 'Photo', 'Name', 'Phone', 'Place', 'Club', 'Pos', 'Status']],
     body: tableData,
-    theme: 'grid', // Adds clean, professional borders
+    theme: 'grid',
+    
+    styles: {
+      fontSize: 9, 
+      cellPadding: 3,
+      overflow: 'ellipsize', // Keeps rows equal height
+    },
+    
     headStyles: { 
-      fillColor: [30, 58, 138], // Matches the Premium Navy Blue header
+      fillColor: [30, 58, 138],
       textColor: 255,
       fontStyle: 'bold',
-      halign: 'center', // Centers header text globally
-      valign: 'middle'
+      halign: 'center', 
+      valign: 'middle',
+      minCellHeight: 18,
     }, 
-    alternateRowStyles: { 
-      fillColor: [247, 249, 252] // Very light blue tint for readability
-    },
+    
+    alternateRowStyles: { fillColor: [247, 249, 252] },
     bodyStyles: { 
-      minCellHeight: 16, // Taller rows for a spacious feel
+      minCellHeight: 18,
       valign: 'middle',
       textColor: [40, 40, 40]
     }, 
-    // Target specific columns for perfect alignment and width
+    
+    // --- NEW WIDER COLUMN MATH ---
+    // Total usable width is now 194mm (210mm A4 width - 16mm margins)
     columnStyles: { 
-      0: { halign: 'center', cellWidth: 10 }, // Index
-      1: { halign: 'center', cellWidth: 18 }, // Photo
-      2: { halign: 'left', fontStyle: 'bold', cellWidth: 40 }, // Name (Bolded for emphasis)
-      3: { halign: 'center', cellWidth: 28 }, // Phone
-      4: { halign: 'left' }, // Place
-      5: { halign: 'left' }, // Club
-      6: { halign: 'center', cellWidth: 16 }, // Position
-      7: { halign: 'center', cellWidth: 22 }  // Status
+      0: { halign: 'center', cellWidth: 10 }, 
+      1: { halign: 'center', cellWidth: 16 }, 
+      2: { halign: 'left', fontStyle: 'bold', cellWidth: 40 }, // Expanded Name (+5mm)
+      3: { halign: 'center', cellWidth: 26 }, 
+      4: { halign: 'left', cellWidth: 30 }, 
+      5: { halign: 'left', cellWidth: 37 }, // Expanded Club (+7mm for long names)
+      6: { halign: 'center', cellWidth: 13 }, 
+      7: { halign: 'center', cellWidth: 22 }  
     }, 
-    didDrawCell: (data) => {
-      // 5. Perfectly center the images inside the Photo column
+    
+didDrawCell: (data) => {
       if (data.column.index === 1 && data.cell.section === 'body') {
         const imgData = imageMap[data.row.index];
         if (imgData) {
-          const imgSize = 12; // 12x12 image size
-          // Calculate perfect center coordinates
+          const imgSize = 12; 
           const xOffset = data.cell.x + (data.cell.width - imgSize) / 2;
           const yOffset = data.cell.y + (data.cell.height - imgSize) / 2;
-          
           doc.addImage(imgData, 'JPEG', xOffset, yOffset, imgSize, imgSize);
         }
       }
+    },
+// --- NEW: ADD PAGE NUMBERS ---
+    didDrawPage: (data) => {
+      // Use the safe, typed data object provided by autoTable
+      const str = `Page ${data.pageNumber}`;
+      
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      
+      // Get exact page dimensions safely
+      const pageSize = doc.internal.pageSize;
+      const pageWidth = pageSize.width || pageSize.getWidth();
+      const pageHeight = pageSize.height || pageSize.getHeight();
+      
+      // Print at the bottom center (10mm from the bottom)
+      doc.text(str, pageWidth / 2, pageHeight - 10, { align: 'center' });
     }
   });
 
