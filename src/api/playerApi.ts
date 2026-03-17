@@ -3,7 +3,7 @@
 
 import type { Player } from '../types';
 
-import { collection, addDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase.config';
 import axios from 'axios';
 
@@ -46,7 +46,7 @@ export const registerPlayer = async (playerData: Omit<Player, 'id' | 'status' | 
   // We keep the safety check here too, just in case
   const status = await getLeagueStatus();
 
-  if (status.total >= 48) throw new Error('League is full! (Max 48)');
+   if (status.total >= 48) throw new Error('League is full! (Max 48)');
   
   if (playerData.position === 'GK') {
     if (status.gkCount >= 7) throw new Error('Goalkeeper slots are full! (Max 7)');
@@ -76,4 +76,9 @@ export const updatePlayerStatusAxios = async ({ id, newStatus }: { id: string; n
 export const deletePlayerAxios = async (id: string) => {
   const url = `${BASE_URL}/${id}`;
   return axios.delete(url);
+};
+
+export const updatePlayerDetails = async (id: string, updatedData: Partial<Player>) => {
+  const playerRef = doc(db, 'players', id);
+  return await updateDoc(playerRef, updatedData);
 };

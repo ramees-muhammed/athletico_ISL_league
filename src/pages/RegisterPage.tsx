@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { pageTransition } from "../utils/motion";
@@ -11,13 +11,13 @@ import Select, { components } from "react-select";
 import "./RegisterPage.scss";
 import Input from "../components/ui/Input/Input";
 import Button from "../components/ui/Button/Button";
-import { getLeagueStatus, registerPlayer } from "../api/playerApi";
+import { getLeagueStatus, registerPlayer, updatePlayerDetails } from "../api/playerApi";
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import imageCompression from "browser-image-compression";
 import type { ToastType } from "../components/ui/Toaster/Toast";
 import Toast from "../components/ui/Toaster/Toast";
-import type { PlayerPosition } from "../types";
+import type { Player, PlayerPosition } from "../types";
 
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
@@ -81,10 +81,14 @@ const RegisterPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const queryClient = useQueryClient();
+  const location = useLocation();
+
+  const playerToEdit = location.state?.player as Player | undefined;
+  const isEditing = !!playerToEdit;
 
   //State for preview images
-  const [facePreview, setFacePreview] = useState<string | null>(null);
-  const [fullPreview, setFullPreview] = useState<string | null>(null);
+  const [facePreview, setFacePreview] = useState<string | null>(playerToEdit?.facePhotoUrl || null);
+  const [fullPreview, setFullPreview] = useState<string | null>(playerToEdit?.fullPhotoUrl || null);
   const [toast, setToast] = useState<{
     isVisible: boolean;
     message: string;
@@ -120,95 +124,95 @@ const RegisterPage = () => {
   });
 
   const formik = useFormik({
-    initialValues: {
-      fullname: "",
-      phone: "",
-      place: "",
-      // age: "",
-      club: "",
-      position: "",
-      facePhoto: null as File | null,
-      fullPhoto: null as File | null,
+  initialValues: {
+      fullname: playerToEdit?.fullname || "",
+      phone: playerToEdit?.phone || "",
+      place: playerToEdit?.place || "",
+      club: playerToEdit?.club || "",
+      position: playerToEdit?.position || "",
+      // If editing, hold the URL string. If new, it's null or a File.
+      facePhoto: (playerToEdit?.facePhotoUrl || null) as File | string | null,
+      fullPhoto: (playerToEdit?.fullPhotoUrl || null) as File | string | null,
     },
     validationSchema,
-    onSubmit: async (values) => {
+onSubmit: async (values) => {
       if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
         showToast("System Error: Environment variables are missing.", "error");
+        return;
+      }
+
+      if (!values.facePhoto || !values.fullPhoto) {
+        showToast("Both photos are required.", "error");
         return;
       }
 
       setIsSubmitting(true);
 
       try {
-        // STEP 1: PRE-CHECK LIMITS (No upload happens yet)
-        const status = await getLeagueStatus();
-
-        if (status.total >= 48) {
-          throw new Error("League is full! Max 48 players reached.");
+        // STEP 1: PRE-CHECK LIMITS (ONLY if creating a NEW player)
+        // If we are editing an existing player, we bypass this check so we don't accidentally block updates when the league is full.
+        if (!isEditing) {
+          const status = await getLeagueStatus();
+          if (status.total >= 48) throw new Error("League is full! Max 48 players reached.");
+          if (values.position === "GK" && status.gkCount >= 7) throw new Error("Goalkeeper slots are full (7/7).");
+          if (values.position !== "GK" && status.outfieldCount >= 41) throw new Error("Outfield player slots are full (41/41).");
         }
 
-        if (values.position === "GK") {
-          if (status.gkCount >= 7)
-            throw new Error("Goalkeeper slots are full (7/7).");
-        } else {
-          if (status.outfieldCount >= 41)
-            throw new Error("Outfield player slots are full (41/41).");
-        }
-
-        // STEP 2: UPLOAD IMAGES (Only happens if STEP 1 passes)
+        // STEP 2: UPLOAD IMAGES (Only if they are new File objects, not existing strings)
         const uploadToCloudinary = async (file: File) => {
-          const options = {
-            maxSizeMB: 1, // Target max size (1MB is plenty for web)
-            maxWidthOrHeight: 1024, // Resize if larger than 1024px
-            useWebWorker: true,
-          };
-
-          let compressedFile = file;
-
-          try {
-            compressedFile = await imageCompression(file, options);
-            console.log(
-              `Original: ${file.size / 1024 / 1024} MB | Compressed: ${compressedFile.size / 1024 / 1024} MB`,
-            );
-          } catch (error) {
-            console.warn("Compression failed, using original file", error);
-          }
+          const compressedFile = await imageCompression(file, { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true }).catch(() => file);
           const formData = new FormData();
           formData.append("file", compressedFile);
           formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-
-          const response = await fetch(
-            `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-            { method: "POST", body: formData },
-          );
-
+          
+          const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
           if (!response.ok) throw new Error("Cloudinary upload failed");
-          const data = await response.json();
-          return data.secure_url;
+          
+          return (await response.json()).secure_url;
         };
 
-        const faceUrl = await uploadToCloudinary(values.facePhoto!);
-        const fullUrl = await uploadToCloudinary(values.fullPhoto!);
+        // Determine final URLs: If the value is a string, it means they didn't change the photo during the edit.
+        // If it's a File, we upload it to Cloudinary.
+        const finalFaceUrl = typeof values.facePhoto === "string" ? values.facePhoto : await uploadToCloudinary(values.facePhoto);
+        const finalFullUrl = typeof values.fullPhoto === "string" ? values.fullPhoto : await uploadToCloudinary(values.fullPhoto);
 
         // STEP 3: SAVE TO FIRESTORE
-        await registerPlayer({
-          fullname: values.fullname,
-          phone: values.phone,
-          place: values.place,
-          club: values.club,
-          position: values.position as PlayerPosition,
-          facePhotoUrl: faceUrl,
-          fullPhotoUrl: fullUrl,
-        });
+        if (isEditing && playerToEdit?.id) {
+          // UPDATE EXISTING PLAYER
+          await updatePlayerDetails(playerToEdit.id, {
+            fullname: values.fullname,
+            phone: values.phone,
+            place: values.place,
+            club: values.club,
+            position: values.position as PlayerPosition,
+            facePhotoUrl: finalFaceUrl,
+            fullPhotoUrl: finalFullUrl,
+          });
+          showToast("Player Updated Successfully!", "success");
+        } else {
+          // CREATE NEW PLAYER
+          await registerPlayer({
+            fullname: values.fullname,
+            phone: values.phone,
+            place: values.place,
+            club: values.club,
+            position: values.position as PlayerPosition,
+            facePhotoUrl: finalFaceUrl,  // Fixed variable name
+            fullPhotoUrl: finalFullUrl,  // Fixed variable name
+          });
+          showToast("Registered Successfully!", "success"); // Fixed typo
+        }
 
-        await queryClient.invalidateQueries({ queryKey: ["players"] }); //FORCE REFRESH: Tell TanStack Query the 'players' list is now old
-
-        showToast("Registratered Successfully!", "success");
-        setTimeout(() => {
-          navigate("/players");
+        // FORCE REFRESH: Tell TanStack Query the 'players' list is now old
+        await queryClient.invalidateQueries({ queryKey: ["players"] }); 
+        
+setTimeout(() => {
+          // 👇 Hands the memory back to the Player List
+          navigate("/players", { state: location.state?.returnState }); 
         }, 1000);
+
       } catch (error: any) {
-        console.error("Registration Error:", error);
+        console.error("Submission Error:", error);
         showToast(error.message || "An unexpected error occurred.", "error");
       } finally {
         setIsSubmitting(false);
@@ -216,18 +220,13 @@ const RegisterPage = () => {
     },
   });
 
-  const handleFileChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    field: string,
-  ) => {
+const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
     const file = e.currentTarget.files?.[0];
     if (file) {
       formik.setFieldValue(field, file);
       const reader = new FileReader();
       reader.onloadend = () => {
-        field === "facePhoto"
-          ? setFacePreview(reader.result as string)
-          : setFullPreview(reader.result as string);
+        field === "facePhoto" ? setFacePreview(reader.result as string) : setFullPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
@@ -290,9 +289,9 @@ const RegisterPage = () => {
       <div className="form-card">
         <header>
           <h2>
-            PLAYER <span>REGISTRATION</span>
+            {isEditing ? "EDIT" : "PLAYER"} <span>{isEditing ? "PLAYER" : "REGISTRATION"}</span>
           </h2>
-          <p>Fill in the details to join the league</p>
+          <p>{isEditing ? "Update player details below" : "Fill in the details to join the league"}</p>
         </header>
 
         <form onSubmit={formik.handleSubmit}>
@@ -377,6 +376,7 @@ const RegisterPage = () => {
 
           <div className="photo-section">
             {/* Face Photo Card */}
+         {/* Face Photo Card */}
             <div className={`upload-card ${facePreview ? "has-image" : ""}`}>
               <label>Face Photo</label>
               <div className="preview-container">
@@ -388,12 +388,12 @@ const RegisterPage = () => {
                       className="remove-btn"
                       title="Remove Photo"
                       onClick={() => {
-                        setFullPreview(null);
-                        formik.setFieldValue("fullPhoto", null);
+                     
+                        setFacePreview(null); 
+                        formik.setFieldValue("facePhoto", null);
                       }}
                     >
                       <X size={16} strokeWidth={2.5} />{" "}
-                      {/* Replaced text with icon */}
                     </button>
                   </>
                 ) : (
@@ -407,7 +407,7 @@ const RegisterPage = () => {
                   </div>
                 )}
               </div>
-            </div>{" "}
+            </div>
             {/* Closing Face Photo Card properly */}
             {/* Full Body Photo Card */}
             <div className={`upload-card ${fullPreview ? "has-image" : ""}`}>
@@ -441,8 +441,8 @@ const RegisterPage = () => {
             </div>
           </div>
 
-          <Button type="submit" isLoading={isSubmitting} variant="secondary">
-            SUBMIT REGISTRATION
+      <Button type="submit" isLoading={isSubmitting} variant="secondary">
+            {isEditing ? "UPDATE PLAYER" : "SUBMIT REGISTRATION"}
           </Button>
         </form>
       </div>

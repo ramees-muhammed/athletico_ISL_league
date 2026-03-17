@@ -360,6 +360,16 @@ display: none;
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         background: #f8f9fa;
 
+        &.edit {
+          color: #3498db; // Blue
+          background: rgba(52, 152, 219, 0.1);
+          &:hover:not(:disabled) {
+            background: #3498db;
+            color: white;
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+          }
+        }
+
         &:disabled {
           opacity: 0.6;
           cursor: not-allowed;
@@ -643,6 +653,16 @@ display: none;
       font-family: var(--font-heading);
       cursor: pointer;
       transition: all 0.2s ease;
+
+      &.edit {
+          color: #3498db; // Blue
+          background: rgba(52, 152, 219, 0.1);
+          &:hover:not(:disabled) {
+            background: #3498db;
+            color: white;
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+          }
+        }
 
       &:disabled {
         opacity: 0.7;

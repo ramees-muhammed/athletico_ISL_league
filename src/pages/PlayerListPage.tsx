@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, Loader2, Trash2, Undo2, ChevronLeft, ChevronRight, Filter, Download } from 'lucide-react'; 
+import { CheckCircle, Loader2, Trash2, Undo2, ChevronLeft, ChevronRight, Filter, Download, Edit } from 'lucide-react'; 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAdmin } from '../context/AdminContext';
 import { pageTransition } from '../utils/motion';
@@ -12,6 +12,7 @@ import { deletePlayerAxios, updatePlayerStatusAxios } from '../api/playerApi';
 import { generatePlayerPdf } from '../utils/generatePlayerPdf';
 import type { ToastType } from '../components/ui/Toaster/Toast';
 import Toast from '../components/ui/Toaster/Toast';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const ITEMS_PER_PAGE = 10;
 type FilterStatus = 'All' | 'Pending' | 'Success';
@@ -25,6 +26,7 @@ const getWebSafeImageUrl = (url?: string) => {
 };
 
 const PlayerListPage = () => {
+  const navigate = useNavigate();
   const { isAdmin } = useAdmin();
   const queryClient = useQueryClient();
   const [activeCard, setActiveCard] = useState<string | null>(null);
@@ -43,12 +45,16 @@ const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
     type: 'success'
   });
 
+  const location = useLocation();
+  const memoryState = location.state as { currentPage?: number; currentFilter?: FilterStatus } | null;
+
   
   // --- PAGINATION STATES ---
-  const [currentPage, setCurrentPage] = useState(1);
+const [currentPage, setCurrentPage] = useState(memoryState?.currentPage || 1);
+  const [currentFilter, setCurrentFilter] = useState<FilterStatus>(memoryState?.currentFilter || 'All');
   const [mobileVisibleCount, setMobileVisibleCount] = useState(10);
 
-  const [currentFilter, setCurrentFilter] = useState<FilterStatus>('All');
+  // const [currentFilter, setCurrentFilter] = useState<FilterStatus>('All');
 
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -334,8 +340,24 @@ setToast({
                     {p.status}
                   </span>
                 </td>
-                {isAdmin && (
+           {isAdmin && (
                   <td className="action-cells">
+                    {/* --- NEW EDIT BUTTON --- */}
+                    <button 
+                      className="action-btn edit"
+                      disabled={isUpdating}
+                   onClick={() => navigate('/register', { 
+      state: { 
+        player: p, 
+        returnState: { currentPage, currentFilter } // 👈 Saves the exact page & filter
+      } 
+    })}
+                      title="Edit Player"
+                    >
+                      <Edit size={18} />
+                    </button>
+
+                    {/* EXISTING STATUS BUTTON */}
                     <button 
                       className={`action-btn ${p.status === 'Pending' ? 'accept' : 'revert'}`}
                       disabled={isUpdating || statusMutation.isPending}
@@ -345,6 +367,8 @@ setToast({
                       {isUpdating ? <Loader2 size={18} className="spin" /> : 
                        p.status === 'Pending' ? <CheckCircle size={18} /> : <Undo2 size={18} />}
                     </button>
+
+                    {/* EXISTING DELETE BUTTON */}
                     <button 
                       className="action-btn delete"
                       onClick={() => setDeleteModal({ open: true, id: p.id || null })}
@@ -440,8 +464,26 @@ setToast({
                           <p><span>Place:</span> {p.place}</p>
                         </div>
                         
-                        {isAdmin && (
+                     {isAdmin && (
                           <div className="mobile-admin-actions">
+                            {/* --- NEW EDIT BUTTON --- */}
+                            <button 
+                              className="mobile-btn edit"
+                              disabled={isUpdating}
+                             onClick={(e) => { 
+      e.stopPropagation(); 
+      navigate('/register', { 
+        state: { 
+          player: p,
+          returnState: { currentPage, currentFilter } 
+        } 
+      }); 
+    }}
+                            >
+                              <Edit size={20} /> Edit Details
+                            </button>
+
+                            {/* EXISTING STATUS BUTTON */}
                             <button 
                               className={`mobile-btn ${p.status === 'Pending' ? 'accept' : 'revert'}`}
                               disabled={isUpdating || statusMutation.isPending}
@@ -455,6 +497,7 @@ setToast({
                               {isUpdating ? 'Updating...' : p.status === 'Pending' ? 'Approve Player' : 'Set to Pending'}
                             </button>
                             
+                            {/* EXISTING DELETE BUTTON */}
                             <button 
                               className="mobile-btn delete"
                               disabled={isUpdating}
